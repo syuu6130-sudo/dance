@@ -1,30 +1,21 @@
 -- =====================================================
--- 世界一長い実用Luaスクリプト骨格（機能満載版）
--- =====================================================
--- 概要:
--- 1万行規模を想定したLuaスクリプト骨格
--- プレイヤー制御、UI、スキル、アイテム、同期、デバッグ、スマホ対応などを統合
+-- 世界一長いLuaスクリプト（基盤部分）
+-- 機能: UI統合・スマホ対応・ドラッグ・縦スクロール・基本操作
 -- =====================================================
 
 -- =============================================
--- SETTINGS / CONFIG
+-- SETTINGS
 -- =============================================
 local Settings = {
-    Control = "pc", -- "pc" or "mobile"
+    Control = "mobile", -- "pc" or "mobile"
     Sensitivity = 1.2,
     LerpSpeed = 0.12,
-    DashSpeed = 100,
-    JumpPower = 50,
     MaxHealth = 100,
     AutoHealRate = 2,
-    SkillCooldowns = {
-        Fireball = 5,
-        Shield = 10,
-        Dash = 2
-    },
+    SkillCooldowns = { Fireball=5, Shield=10, Dash=2 },
     UITheme = {
-        PrimaryColor = Color3.fromRGB(50, 150, 255),
-        SecondaryColor = Color3.fromRGB(200, 200, 200),
+        PrimaryColor = Color3.fromRGB(50,150,255),
+        SecondaryColor = Color3.fromRGB(200,200,200),
         Transparency = 0.3
     }
 }
@@ -33,14 +24,9 @@ local Settings = {
 -- SERVICES
 -- =============================================
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local StarterGui = game:GetService("StarterGui")
-local ContextActionService = game:GetService("ContextActionService")
-local HttpService = game:GetService("HttpService")
-
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
@@ -48,202 +34,144 @@ local humanoid = character:WaitForChild("Humanoid")
 -- =============================================
 -- GLOBAL VARIABLES
 -- =============================================
-local InputState = {
-    Move = Vector3.zero,
-    Look = Vector2.zero,
-    Skills = {},
-    DashActive = false
-}
-
-local PlayerData = {
-    Health = Settings.MaxHealth,
-    Buffs = {},
-    Debuffs = {},
-    Inventory = {},
-    Equipped = {},
-    Stats = { Strength = 10, Agility = 10, Intelligence = 10 }
-}
-
+local InputState = { Move=Vector3.zero, Look=Vector2.zero, Skills={}, DashActive=false }
+local PlayerData = { Health=Settings.MaxHealth, Buffs={}, Debuffs={}, Inventory={}, Equipped={}, Stats={Strength=10,Agility=10,Intelligence=10} }
 local UIRefs = {}
-local DebugLogs = {}
 
 -- =============================================
 -- UTILITY FUNCTIONS
 -- =============================================
-local function clamp(val, min, max)
-    return math.max(min, math.min(max, val))
-end
-
-local function lerp(a, b, t)
-    return a + (b - a) * t
-end
-
-local function tableMerge(t1, t2)
-    for k,v in pairs(t2) do t1[k]=v end
-    return t1
-end
-
-local function debugLog(msg)
-    table.insert(DebugLogs, msg)
-    if #DebugLogs > 1000 then table.remove(DebugLogs,1) end
-    print("[DEBUG]", msg)
-end
-
--- =============================================
--- ARM CONTROL MODULE
--- =============================================
-local ArmJoints = {}
-do
-    local function getArmJoints(char, side)
-        local upper = char:FindFirstChild(side.."UpperArm")
-        local lower = char:FindFirstChild(side.."LowerArm")
-        local hand = char:FindFirstChild(side.."Hand")
-        if upper and lower and hand then
-            return {
-                Upper = upper:FindFirstChildOfClass("Motor6D"),
-                Lower = lower:FindFirstChildOfClass("Motor6D"),
-                Hand = hand:FindFirstChildOfClass("Motor6D")
-            }
-        end
-    end
-    ArmJoints.Right = getArmJoints(character,"Right")
-    ArmJoints.Left = getArmJoints(character,"Left")
-end
+local function clamp(val,min,max) return math.max(min,math.min(max,val)) end
+local function lerp(a,b,t) return a + (b-a)*t end
+local function debugLog(msg) print("[DEBUG]",msg) end
 
 -- =============================================
 -- UI MODULE
 -- =============================================
 local function createUI()
-    local playerGui = player:WaitForChild("PlayerGui",5)
-    if not playerGui then debugLog("PlayerGui取得失敗") return end
-
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Parent = playerGui
+    screenGui.Parent = player:WaitForChild("PlayerGui")
     screenGui.ResetOnSpawn = false
 
-    -- ステータスバー
-    local healthBar = Instance.new("Frame")
-    healthBar.Size = UDim2.new(0.3,0,0.03,0)
-    healthBar.Position = UDim2.new(0.35,0,0.95,0)
-    healthBar.BackgroundColor3 = Settings.UITheme.PrimaryColor
-    healthBar.Parent = screenGui
-    UIRefs.HealthBar = healthBar
+    -- メインフレーム
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0,400,0,600)
+    mainFrame.Position = UDim2.new(0.3,0,0.1,0)
+    mainFrame.BackgroundColor3 = Settings.UITheme.PrimaryColor
+    mainFrame.BackgroundTransparency = Settings.UITheme.Transparency
+    mainFrame.Active = true
+    mainFrame.Draggable = true
+    mainFrame.Parent = screenGui
+    UIRefs.MainFrame = mainFrame
 
-    -- ミニマップ (仮)
-    local miniMap = Instance.new("Frame")
-    miniMap.Size = UDim2.new(0.2,0,0.2,0)
-    miniMap.Position = UDim2.new(0.8,0,0,0)
-    miniMap.BackgroundColor3 = Settings.UITheme.SecondaryColor
-    miniMap.BackgroundTransparency = 0.5
-    miniMap.Parent = screenGui
-    UIRefs.MiniMap = miniMap
+    -- 最小化ボタン
+    local minBtn = Instance.new("TextButton")
+    minBtn.Size = UDim2.new(0,30,0,30)
+    minBtn.Position = UDim2.new(1,-35,0,5)
+    minBtn.Text = "-"
+    minBtn.Parent = mainFrame
+    minBtn.MouseButton1Click:Connect(function()
+        mainFrame.Visible = false
+    end)
 
-    debugLog("UI生成完了")
+    -- 閉じるボタン（❌）
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0,30,0,30)
+    closeBtn.Position = UDim2.new(1,-70,0,5)
+    closeBtn.Text = "❌"
+    closeBtn.Parent = mainFrame
+    closeBtn.MouseButton1Click:Connect(function()
+        local yesNo = Instance.new("TextButton")
+        yesNo.Size = UDim2.new(0,200,0,100)
+        yesNo.Position = UDim2.new(0.5,-100,0.5,-50)
+        yesNo.Text = "本当に削除しますか？ はい / いいえ"
+        yesNo.Parent = screenGui
+        yesNo.MouseButton1Click:Connect(function()
+            yesNo:Destroy()
+            mainFrame:Destroy()
+        end)
+    end)
+
+    -- ログパネル（縦スクロール）
+    local logFrame = Instance.new("ScrollingFrame")
+    logFrame.Size = UDim2.new(1,-10,0.5,-10)
+    logFrame.Position = UDim2.new(0,5,0.5,5)
+    logFrame.CanvasSize = UDim2.new(0,0,10,0) --縦長
+    logFrame.ScrollBarThickness = 10
+    logFrame.BackgroundColor3 = Settings.UITheme.SecondaryColor
+    logFrame.BackgroundTransparency = 0.5
+    logFrame.Parent = mainFrame
+    UIRefs.LogPanel = logFrame
 end
 
 -- =============================================
--- INPUT MODULE
+-- INPUT MODULE（スマホ対応）
 -- =============================================
-local function setupInput()
-    if Settings.Control == "pc" then
-        local lastPos = UserInputService:GetMouseLocation()
-        RunService.RenderStepped:Connect(function()
-            local mousePos = UserInputService:GetMouseLocation()
-            local delta = (mousePos - lastPos) * 0.005
-            InputState.Look = Vector2.new(delta.X, delta.Y)
-            lastPos = mousePos
-        end)
+local function setupMobileSticks()
+    local screenGui = player:WaitForChild("PlayerGui")
+    local function createStick(side)
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(0,120,0,120)
+        frame.AnchorPoint = Vector2.new(0.5,0.5)
+        frame.BackgroundColor3 = Color3.fromRGB(50,50,50)
+        frame.BackgroundTransparency = 0.3
+        frame.Position = side=="left" and UDim2.new(0.25,0,0.85,0) or UDim2.new(0.75,0,0.85,0)
+        frame.Parent = screenGui
 
-        UserInputService.InputBegan:Connect(function(input, gpe)
-            if gpe then return end
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                if input.KeyCode == Enum.KeyCode.Space then
-                    humanoid.Jump = true
-                end
+        local stick = Instance.new("ImageButton")
+        stick.Size = UDim2.new(0,60,0,60)
+        stick.Position = UDim2.new(0.5,0,0.5,0)
+        stick.AnchorPoint = Vector2.new(0.5,0.5)
+        stick.BackgroundTransparency = 0.5
+        stick.AutoButtonColor = false
+        stick.Parent = frame
+        return frame,stick
+    end
+
+    local leftF,leftS = createStick("left")
+    local rightF,rightS = createStick("right")
+    local function stickHandler(stick,frame,updateFunc)
+        local dragging = false
+        local center = stick.Position
+        stick.InputBegan:Connect(function(input)
+            if input.UserInputType==Enum.UserInputType.Touch then dragging=true end
+        end)
+        stick.InputEnded:Connect(function(input)
+            if input.UserInputType==Enum.UserInputType.Touch then
+                dragging=false
+                stick.Position=center
+                updateFunc(Vector2.zero)
             end
         end)
-    else
-        -- モバイル仮想スティック (後で展開)
+        stick.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType==Enum.UserInputType.Touch then
+                local rel = frame.AbsolutePosition + frame.AbsoluteSize/2
+                local offset = Vector2.new(input.Position.X-rel.X,input.Position.Y-rel.Y)
+                local maxDist = frame.AbsoluteSize.X/2
+                if offset.Magnitude>maxDist then offset = offset.Unit*maxDist end
+                stick.Position=UDim2.new(0.5,offset.X,0.5,offset.Y)
+                updateFunc(offset/maxDist)
+            end
+        end)
     end
+
+    stickHandler(leftS,leftF,function(vec) InputState.Move=Vector3.new(vec.X,0,vec.Y) end)
+    stickHandler(rightS,rightF,function(vec) InputState.Look=vec end)
 end
 
 -- =============================================
--- SKILL MODULE
--- =============================================
-local Skills = {}
-do
-    Skills.Fireball = function()
-        debugLog("Fireball発射")
-        -- 弾作成・飛ばす処理仮
-    end
-
-    Skills.Shield = function()
-        debugLog("Shield発動")
-        -- バリア処理
-    end
-
-    Skills.Dash = function()
-        debugLog("Dash開始")
-        InputState.DashActive = true
-        delay(Settings.SkillCooldowns.Dash, function() InputState.DashActive = false end)
-    end
-end
-
--- =============================================
--- PLAYER LOOP
+-- GAME LOOP
 -- =============================================
 RunService.RenderStepped:Connect(function(delta)
     -- 移動制御
-    local moveVector = Vector3.zero
-    if InputState.DashActive then
-        moveVector = humanoid.MoveDirection * Settings.DashSpeed
-    else
-        moveVector = humanoid.MoveDirection
-    end
-    humanoid:Move(moveVector, true)
-
-    -- 腕制御 (VR風)
-    local function updateArm(joints, input)
-        if not joints then return end
-        local pitch = -input.Y * Settings.Sensitivity
-        local yaw = input.X * Settings.Sensitivity
-        if joints.Upper then joints.Upper.C0 = joints.Upper.C0:Lerp(CFrame.Angles(pitch,yaw,0),0.12) end
-        if joints.Lower then joints.Lower.C0 = joints.Lower.C0:Lerp(CFrame.Angles(pitch/2,yaw/2,0),0.12) end
-        if joints.Hand then joints.Hand.C0 = joints.Hand.C0:Lerp(CFrame.Angles(pitch/3,yaw/3,0),0.12) end
-    end
-    updateArm(ArmJoints.Right, InputState.Look)
-    updateArm(ArmJoints.Left, InputState.Look)
+    humanoid:Move(InputState.Move, true)
 
     -- 自動回復
     PlayerData.Health = clamp(PlayerData.Health + Settings.AutoHealRate*delta, 0, Settings.MaxHealth)
-    if UIRefs.HealthBar then
-        UIRefs.HealthBar.Size = UDim2.new(PlayerData.Health/Settings.MaxHealth*0.3,0,0.03,0)
-    end
 end)
 
 -- =============================================
 -- INITIALIZATION
 -- =============================================
 createUI()
-setupInput()
-
--- =============================================
--- CHARACTER ADDED HANDLER
--- =============================================
-player.CharacterAdded:Connect(function(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid")
-    ArmJoints.Right = character:FindFirstChild("RightUpperArm") and character.RightUpperArm:FindFirstChildOfClass("Motor6D") or nil
-    ArmJoints.Left = character:FindFirstChild("LeftUpperArm") and character.LeftUpperArm:FindFirstChildOfClass("Motor6D") or nil
-    debugLog("Characterリスポーン完了")
-end)
-
--- =============================================
--- DEBUG MODULE
--- =============================================
-local function showDebugInfo()
-    print("Health:", PlayerData.Health)
-    print("Buffs:", #PlayerData.Buffs, "Debuffs:", #PlayerData.Debuffs)
-    print("Inventory:", #PlayerData.Inventory)
-    print("Skills:", table.concat({"Fireball","Shield","Dash"},","))
-end
+if Settings.Control=="mobile" then setupMobileSticks() end

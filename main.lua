@@ -1,9 +1,10 @@
+-- LocalScript: StarterGui に配置してください
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 
--- 100個の公式ダンスID（例としてRoblox公式の一般的なダンスIDを入れています）
+-- ダンス100個ID（例）
 local danceAnimations = {
     Dance1="rbxassetid://507766666", Dance2="rbxassetid://507766777", Dance3="rbxassetid://507766888",
     Dance4="rbxassetid://507766999", Dance5="rbxassetid://507767000", Dance6="rbxassetid://507767111",
@@ -46,18 +47,18 @@ local currentButtonName = nil
 local isVertical = true
 local isMinimized = false
 
--- ScreenGui作成
+-- ScreenGui
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 screenGui.Name = "DanceGui"
 
 -- メインフレーム
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 600, 0, 400)
+mainFrame.Size = UDim2.new(0,600,0,400)
 mainFrame.Position = UDim2.new(0,50,0,50)
 mainFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
 mainFrame.Parent = screenGui
 
--- コントロールボタンフレーム
+-- コントロールフレーム
 local controlFrame = Instance.new("Frame")
 controlFrame.Size = UDim2.new(1,0,0,40)
 controlFrame.BackgroundTransparency = 1
@@ -80,7 +81,7 @@ gridLayout.FillDirection = Enum.FillDirection.Vertical
 gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 gridLayout.Parent = scrollFrame
 
--- トグルアニメ関数
+-- トグルダンス再生関数
 local function toggleDance(name)
     local animId = danceAnimations[name]
     if not animId then return end
@@ -99,7 +100,7 @@ local function toggleDance(name)
     currentButtonName = name
 end
 
--- ボタン生成
+-- ダンスボタン生成
 for i=1,100 do
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0,60,0,60)
@@ -121,7 +122,7 @@ end
 gridLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
 updateCanvas()
 
--- []ボタン 縦/横切替
+-- [] ボタン：縦横切替
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0,40,0,40)
 toggleBtn.Position = UDim2.new(0,0,0,0)
@@ -137,7 +138,7 @@ toggleBtn.MouseButton1Click:Connect(function()
     updateCanvas()
 end)
 
--- _ボタン 最小化/展開
+-- _ ボタン：最小化/展開
 local minBtn = Instance.new("TextButton")
 minBtn.Size = UDim2.new(0,40,0,40)
 minBtn.Position = UDim2.new(0,50,0,0)
@@ -153,7 +154,7 @@ minBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ❌ボタン 閉じる確認
+-- ❌ ボタン：閉じる確認
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0,40,0,40)
 closeBtn.Position = UDim2.new(0,100,0,0)
@@ -163,4 +164,33 @@ closeBtn.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
     local confirmFrame = Instance.new("Frame")
     confirmFrame.Size = UDim2.new(0,300,0,150)
-    confirmFrame.Position = UDim2.new(0.5,-150,0.5
+    confirmFrame.Position = UDim2.new(0.5,-150,0.5,-75)
+    confirmFrame.BackgroundColor3 = Color3.fromRGB(80,80,80)
+    confirmFrame.Parent = screenGui
+
+    local txt = Instance.new("TextLabel")
+    txt.Size = UDim2.new(1,0,0.5,0)
+    txt.Text = "本当に閉じますか？"
+    txt.TextScaled = true
+    txt.BackgroundTransparency = 1
+    txt.Parent = confirmFrame
+
+    local yesBtn = Instance.new("TextButton")
+    yesBtn.Size = UDim2.new(0.4,0,0.3,0)
+    yesBtn.Position = UDim2.new(0.05,0,0.6,0)
+    yesBtn.Text = "はい"
+    yesBtn.Parent = confirmFrame
+    yesBtn.MouseButton1Click:Connect(function()
+        screenGui:Destroy()
+    end)
+
+    local backBtn = Instance.new("TextButton")
+    backBtn.Size = UDim2.new(0.4,0,0.3,0)
+    backBtn.Position = UDim2.new(0.55,0,0.6,0)
+    backBtn.Text = "戻る"
+    backBtn.Parent = confirmFrame
+    backBtn.MouseButton1Click:Connect(function()
+        confirmFrame:Destroy()
+        mainFrame.Visible = true
+    end)
+end)
